@@ -21,9 +21,17 @@ class Odometry:
         self.distance_threshold = distance_threshold
         self.T_from_curr_to_odom = np.eye(4)
 
-    def scan_callback(self, pcd : o3d.geometry.PointCloud) -> np.ndarray:
+    def get_transform_from_frame_to_init(self) -> np.ndarray:
+        """Returns the transformation matrix that transforms from the current
+        frame to the initial pose.
+        """
+        return np.copy(self.T_from_curr_to_odom)
+
+    def register(self, pcd : o3d.geometry.PointCloud) -> np.ndarray:
         """Performs the registration between the provided point cloud and the
         previous point cloud received.
+
+        If it is the first scan, the returned transformation is the identity.
 
         Arguments
         -----

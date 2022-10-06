@@ -56,7 +56,7 @@ def main() -> int:
         pcd = scan_array_to_pointcloud(scan_array)
         
         # Perform registration
-        T_current_to_prev = odometry.scan_callback(pcd)
+        T_current_to_prev = odometry.register(pcd)
         between_pose_dict = split_transform(T_current_to_prev)
 
         # Update the transformation matrix
