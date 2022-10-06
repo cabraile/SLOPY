@@ -2,38 +2,40 @@
 import numpy as np
 import open3d as o3d
 
-def scan_array_to_pointcloud(scan : np.ndarray) -> o3d.geometry.PointCloud:
-    """Converts the N-by-M array of the scan to a 3D point cloud.
-
-    Drops any additional field as intensity or color.
-    """
-    xyz_array = scan[:,:3]
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(xyz_array)
-    return pcd
 
 class Odometry:
     """Laser odometry based on the tutorial from http://www.open3d.org/docs/release/tutorial/pipelines/global_registration.html"""
 
-    def __init__(self) -> None:
+    def __init__(self, voxel_size : float = 0.1, distance_threshold : float = 5.0) -> None:
+        """
+        Arguments
+        -----
+        voxel_size: float.
+            The size (in meters) of each voxel in order to apply the voxel grid 
+            downsample.
+        distance_threshold: float.
+            The maximum distance (in meters) two consecutive scans can be from each other.
+        """
         self.last_pcd = None
-        self.voxel_size = 0.1
-        self.global_map = o3d.geometry.PointCloud()
-        self.T_from_prev_to_odom = np.eye(4)
+        self.voxel_size = voxel_size
+        self.distance_threshold = distance_threshold
+        self.T_from_curr_to_odom = np.eye(4)
 
-        # TODO: compute velocities
-        self.linear_velocity = np.zeros(3)
-        self.angular_velocity = np.zeros(3)
+    def scan_callback(self, pcd : o3d.geometry.PointCloud) -> np.ndarray:
+        """Performs the registration between the provided point cloud and the
+        previous point cloud received.
 
-    def get_global_map(self) -> o3d.geometry.PointCloud():
-        return self.global_map
-
-    def downsample_global_map(self) -> None:
-        self.global_map  = self.global_map .voxel_down_sample(self.voxel_size)
-
-    def scan_callback(self, scan : np.ndarray) -> np.ndarray:
+        Arguments
+        -----
+        pcd: open3d.geometry.PointCloud.
+            The scan point cloud received.
+        
+        Returns
+        -----
+        numpy.ndarray: The 4-by-4 transformation matrix that projects from the
+            current point cloud frame to the previous frame.
+        """
         # Adequate input
-        pcd = scan_array_to_pointcloud(scan)
         pcd = pcd.voxel_down_sample(self.voxel_size)
         T_init = np.eye(4)
         pcd = pcd.transform(T_init)
@@ -45,15 +47,12 @@ class Odometry:
         # Store current pcd and return
         if self.last_pcd is None:
             self.last_pcd = pcd
-            self.global_map += o3d.geometry.PointCloud(pcd.points)
-            return self.T_from_prev_to_odom
+            return self.T_from_curr_to_odom
         
         # Register
-        distance_threshold = 5.0
-
         # - Goal: register current pcd to previous (T_from_curr_to_prev)
         result = o3d.pipelines.registration.registration_icp(
-            pcd, self.last_pcd, distance_threshold, T_init,
+            pcd, self.last_pcd, self.distance_threshold, T_init,
             o3d.pipelines.registration.TransformationEstimationPointToPlane()
         )
         T_from_curr_to_prev = result.transformation
@@ -61,10 +60,8 @@ class Odometry:
         # Store current PCD
         self.last_pcd = pcd
 
-        # Map the registered PCD and update current estimation
-        T_from_curr_to_odom = self.T_from_prev_to_odom @ T_from_curr_to_prev
-        pcd_global_frame = o3d.geometry.PointCloud(pcd.points).transform(T_from_curr_to_odom)
-        self.global_map += pcd_global_frame
-        self.T_from_prev_to_odom = T_from_curr_to_odom
+        # Update current to odom
+        T_from_prev_to_odom = self.T_from_curr_to_odom
+        self.T_from_curr_to_odom = T_from_prev_to_odom @ T_from_curr_to_prev
 
         return T_from_curr_to_prev
