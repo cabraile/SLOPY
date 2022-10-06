@@ -6,7 +6,7 @@ In this repository, the "Simple Laser Odometry in Python" (SLOPY) was implemente
 Therefore, do not expect very fancy graph optimization-ish features or estimations at high frequencies, but yet a very modest pose estimation technique based on the Open3D registration tools.
 
 # Installation (from source)
-1. Install the dependencies executing `requirements.txt`. 
+1. Install the dependencies executing `pip3 install -r requirements.txt`. 
 
 2. Next run `python3 setup.py build && python3 setup.py install`.
 
