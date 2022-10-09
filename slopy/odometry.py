@@ -1,12 +1,17 @@
-# 
+from typing import Optional
 import numpy as np
 import open3d as o3d
-
+from scipy.spatial.transform import Rotation
 
 class Odometry:
     """Laser odometry based on the tutorial from http://www.open3d.org/docs/release/tutorial/pipelines/global_registration.html"""
 
-    def __init__(self, voxel_size : float = 0.1, distance_threshold : float = 5.0) -> None:
+    def __init__(
+        self, 
+        voxel_size : float = 0.1, 
+        distance_threshold : float = 5.0,
+        frequency : Optional[float] = None
+    ) -> None:
         """
         Arguments
         -----
@@ -15,11 +20,50 @@ class Odometry:
             downsample.
         distance_threshold: float.
             The maximum distance (in meters) two consecutive scans can be from each other.
+        frequency: float.
+            Frequency in Hz the laser scanner provides messages. 
+            If not provided, velocities will not be computed.
+            Used for providing prior position estimates (constant velocity 
+            model).
         """
         self.last_pcd = None
         self.voxel_size = voxel_size
         self.distance_threshold = distance_threshold
         self.T_from_curr_to_odom = np.eye(4)
+
+        # Computes velocity for improving the prior pose estimation 
+        self.estimate_velocity = frequency is not None
+        if self.estimate_velocity:
+            self.delta_t = 1.0 / frequency
+        else:
+            self.delta_t = 0.0
+        self.linear_velocity_x = 0.0
+        self.linear_velocity_y = 0.0
+        self.linear_velocity_z = 0.0
+        self.angular_velocity_x = 0.0
+        self.angular_velocity_y = 0.0
+        self.angular_velocity_z = 0.0
+
+    def displacement_transform_from_velocities(self) -> np.ndarray:
+        # Compute linear displacement
+        linear_displacement_x = self.linear_velocity_x * self.delta_t
+        linear_displacement_y = self.linear_velocity_y * self.delta_t
+        linear_displacement_z = self.linear_velocity_z * self.delta_t
+
+        # Compute angular displacement
+        angular_displacement_x = self.angular_velocity_x * self.delta_t
+        angular_displacement_y = self.angular_velocity_y * self.delta_t
+        angular_displacement_z = self.angular_velocity_z * self.delta_t
+
+        # Build transformation matrix
+        T_from_curr_to_prev = np.eye(4)
+        T_from_curr_to_prev[:3,:3] = Rotation.from_euler(
+            "xyz",
+            [angular_displacement_x, angular_displacement_y, angular_displacement_z],
+            degrees = False
+        ).as_matrix()
+        T_from_curr_to_prev[:3,3] = [linear_displacement_x, linear_displacement_y, linear_displacement_z]
+        return T_from_curr_to_prev
 
     def get_transform_from_frame_to_init(self) -> np.ndarray:
         """Returns the transformation matrix that transforms from the current
@@ -27,7 +71,7 @@ class Odometry:
         """
         return np.copy(self.T_from_curr_to_odom)
 
-    def register(self, pcd : o3d.geometry.PointCloud) -> np.ndarray:
+    def register(self, pcd : o3d.geometry.PointCloud, T_prior : Optional[np.ndarray] = None) -> np.ndarray:
         """Performs the registration between the provided point cloud and the
         previous point cloud received.
 
@@ -37,16 +81,30 @@ class Odometry:
         -----
         pcd: open3d.geometry.PointCloud.
             The scan point cloud received.
+        T_prior: numpy.ndarray. 
+            The initial 4-by-4 transformation matrix that transforms the 
+            current point cloud to the previous frame. 
+
+            If not provided, then a prior will be computed from the velocities, 
+            if a frequency was provided. Otherwise, the identity matrix will be 
+            used.
         
         Returns
         -----
         numpy.ndarray: The 4-by-4 transformation matrix that projects from the
             current point cloud frame to the previous frame.
         """
+        # T_init corresponds to the first "guess" of the registration
+        if T_prior is None:
+            if self.estimate_velocity:
+                T_init = self.displacement_transform_from_velocities()
+            else:
+                T_init = np.eye(4)
+        else:
+            T_init = T_prior
+
         # Adequate input
         pcd = pcd.voxel_down_sample(self.voxel_size)
-        T_init = np.eye(4)
-        pcd = pcd.transform(T_init)
 
         # Estimate normals
         radius_normal = self.voxel_size * 2
@@ -71,5 +129,17 @@ class Odometry:
         # Update current to odom
         T_from_prev_to_odom = self.T_from_curr_to_odom
         self.T_from_curr_to_odom = T_from_prev_to_odom @ T_from_curr_to_prev
+
+        # Update velocities (if enabled)
+        if self.estimate_velocity:
+            R = T_from_curr_to_prev[:3,:3].copy()
+            delta_x, delta_y, delta_z = T_from_curr_to_prev[:3,3]
+            delta_roll, delta_pitch, delta_yaw = Rotation.from_matrix(R).as_euler("xyz", degrees=False)
+            self.linear_velocity_x = delta_x / self.delta_t
+            self.linear_velocity_y = delta_y / self.delta_t
+            self.linear_velocity_z = delta_z / self.delta_t
+            self.angular_velocity_x = delta_roll / self.delta_t
+            self.angular_velocity_y = delta_pitch / self.delta_t
+            self.angular_velocity_z = delta_yaw / self.delta_t
 
         return T_from_curr_to_prev

@@ -9,7 +9,8 @@ from slopy.odometry import Odometry
 
 def split_transform(T) -> Dict[str, float]:
     """Splits a transformation matrix to position and orientation."""
-    roll, pitch, yaw = Rotation.from_matrix(T[:3,:3]).as_euler("xyz",degrees=False)
+    R = T[:3,:3].copy()
+    roll, pitch, yaw = Rotation.from_matrix(R).as_euler("xyz",degrees=False)
     x, y, z = T[:3,3]
     return {"x" : x, "y" : y, "z" : z, "roll" : roll, "pitch" : pitch, "yaw" : yaw}
 
@@ -30,10 +31,10 @@ def scan_array_to_pointcloud(scan : np.ndarray) -> o3d.geometry.PointCloud:
 
 def main() -> int:
     if len(sys.argv) == 1:
-        print("Usage: python3 demo.py PATH_TO_SCANS")
+        print("Usage: python3 demo.py PATH_TO_SCANS OPTIONAL_FREQUENCY")
         return 1
-    
-    voxel_size = 0.15
+
+    voxel_size = 0.25
     downsample_every_n_steps = 30
 
     # Load the scan names and sort them
@@ -42,10 +43,15 @@ def main() -> int:
     scans_names.sort(
         key = lambda file_name : int(os.path.splitext(file_name)[0]) 
     )
+    
+    # Load the frequency (if available)
+    frequency = None
+    if len(sys.argv) > 2:
+        frequency = float(sys.argv[2])
 
     # Start registration
     T_from_prev_to_odom = np.eye(4)
-    odometry = Odometry()
+    odometry = Odometry(voxel_size=voxel_size, frequency=frequency)
     global_map = o3d.geometry.PointCloud()
     for seq_idx,scan_name in enumerate(scans_names):
         print(f"\nSequence index {seq_idx}")
