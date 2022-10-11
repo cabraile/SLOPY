@@ -8,11 +8,10 @@ Therefore, do not expect very fancy graph optimization-ish features or estimatio
 from slopy.odometry import Odometry
 
 # Instantiate the odometry module
-scan_frequency = 
 odometry = Odometry(
     voxel_size = voxel_size, # The voxel size (in meters) for downsampling the input
     distance_threshold = distance_threshold, # The maximum distance (in meters) two consecutive scans can be from each other
-    frequency = 10.0 # (Optional) Frequency in Hertz
+    frequency = 10.0 # (Optional) Scan frequency in Hertz
 )
 
 # Receive scan
