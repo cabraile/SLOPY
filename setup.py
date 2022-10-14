@@ -6,7 +6,7 @@ def read(fname):
 
 setup(
     name = "slopy",
-    version = "0.0.2",
+    version = "0.0.3",
     author = "Carlos André Braile Przewodowski Filho",
     author_email = "andre.prze.filho@gmail.com",
     description = ("Simple Laser Odometry in written in Python."),
