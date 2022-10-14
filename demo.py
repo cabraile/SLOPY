@@ -36,6 +36,7 @@ def main() -> int:
 
     voxel_size = 0.25
     downsample_every_n_steps = 30
+    mode="point-to-plane"
 
     # Load the scan names and sort them
     scans_dir = os.path.abspath(sys.argv[1])
@@ -51,7 +52,7 @@ def main() -> int:
 
     # Start registration
     T_from_prev_to_odom = np.eye(4)
-    odometry = Odometry(voxel_size=voxel_size, frequency=frequency)
+    odometry = Odometry(voxel_size=voxel_size, frequency=frequency, mode=mode)
     global_map = o3d.geometry.PointCloud()
     for seq_idx,scan_name in enumerate(scans_names):
         print(f"\nSequence index {seq_idx}")

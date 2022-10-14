@@ -10,7 +10,8 @@ class Odometry:
         self, 
         voxel_size : float = 0.1, 
         distance_threshold : float = 5.0,
-        frequency : Optional[float] = None
+        frequency : Optional[float] = None,
+        mode: str = "point-to-point"
     ) -> None:
         """
         Arguments
@@ -25,12 +26,22 @@ class Odometry:
             If not provided, velocities will not be computed.
             Used for providing prior position estimates (constant velocity 
             model).
+        mode : str.
+            Registration mode. Options: "point-to-point" or "point-to-plane".
         """
         self.last_pcd = None
         self.voxel_size = voxel_size
         self.distance_threshold = distance_threshold
         self.T_from_curr_to_odom = np.eye(4)
 
+        self.flag_compute_normals = (mode == "point-to-plane")
+
+        if mode == "point-to-point":
+            self.registration_mode = o3d.pipelines.registration.TransformationEstimationPointToPoint()
+        elif mode == "point-to-plane":
+            self.registration_mode = o3d.pipelines.registration.TransformationEstimationPointToPlane()
+        else:
+            raise Exception("Invalid option 'mode'. Registration modes available: 'point-to-point' or 'point-to-plane'.")
         # Computes velocity for improving the prior pose estimation 
         self.estimate_velocity = frequency is not None
         if self.estimate_velocity:
@@ -107,8 +118,9 @@ class Odometry:
         pcd = pcd.voxel_down_sample(self.voxel_size)
 
         # Estimate normals
-        radius_normal = self.voxel_size * 2
-        pcd.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=30))
+        if self.flag_compute_normals:
+            radius_normal = self.voxel_size * 2
+            pcd.estimate_normals(o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=30))
 
         # Store current pcd and return
         if self.last_pcd is None:
@@ -119,7 +131,7 @@ class Odometry:
         # - Goal: register current pcd to previous (T_from_curr_to_prev)
         result = o3d.pipelines.registration.registration_icp(
             pcd, self.last_pcd, self.distance_threshold, T_init,
-            o3d.pipelines.registration.TransformationEstimationPointToPlane()
+            self.registration_mode
         )
         T_from_curr_to_prev = result.transformation
 
