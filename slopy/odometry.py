@@ -82,7 +82,7 @@ class Odometry:
         """
         return np.copy(self.T_from_curr_to_odom)
 
-    def register(self, pcd : o3d.geometry.PointCloud, T_prior : Optional[np.ndarray] = None) -> np.ndarray:
+    def register(self, pcd : o3d.geometry.PointCloud, T_prior : Optional[np.ndarray] = None, R_prior : Optional[np.ndarray] = None, t_prior : Optional[np.ndarray] = None) -> np.ndarray:
         """Performs the registration between the provided point cloud and the
         previous point cloud received.
 
@@ -99,6 +99,14 @@ class Odometry:
             If not provided, then a prior will be computed from the velocities, 
             if a frequency was provided. Otherwise, the identity matrix will be 
             used.
+
+            It overrides the R_prior and t_prior arguments.
+        R_prior: numpy.ndarray.
+            The initial 3-by-3 rotation matrix that transforms the current
+            point cloud to the previous frame.
+        t_prior: numpy.ndarray.
+            The initial 3d translation vector that transforms the current
+            point cloud to the previous frame.
         
         Returns
         -----
@@ -111,6 +119,10 @@ class Odometry:
                 T_init = self.displacement_transform_from_velocities()
             else:
                 T_init = np.eye(4)
+            if R_prior is not None:
+                T_init[:3,:3] = R_prior
+            if t_prior is not None:
+                T_init[:3,3] = t_prior
         else:
             T_init = T_prior
 
